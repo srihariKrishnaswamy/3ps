@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import time
-import monodepth2.est
 
 capture = cv2.VideoCapture(0)
 
@@ -27,11 +26,10 @@ def outlineRed(frame):
     for contour in filtered_contours:
         x, y, w, h = cv2.boundingRect(contour)
         biggest_box = [0, 0, 0, 0]
-        if w > 100 and h > 100:
+        if w > 400 and h > 400:
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             if (w * h > biggest_box[2] * biggest_box[3]):
                 biggest_box = [x, y, w, h]
-    monodepth2.est(frame[y: y + h, x: x + w])
     return frame
 
 
