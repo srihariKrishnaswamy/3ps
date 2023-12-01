@@ -10,6 +10,8 @@ if not capture.isOpened():
 
 cv2.namedWindow('Camera Feed', cv2.WINDOW_NORMAL)
 
+REAL_AREA = 20 # will be like square cm or smth
+
 def outlineRed(frame):
     # return frame
     frame = cv2.GaussianBlur(frame, (175, 175), cv2.BORDER_DEFAULT)
