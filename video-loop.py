@@ -26,7 +26,7 @@ def outlineRect(frame):
 
     if contours:
         largest_contour = max(contours, key=cv2.contourArea)
-
+        print("CONTOUR AREA: " + str(cv2.contourArea(largest_contour)))
         mask = np.zeros_like(edges)
         cv2.drawContours(mask, [largest_contour], -1, (255), thickness=cv2.FILLED)
 
