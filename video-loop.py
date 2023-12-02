@@ -12,27 +12,29 @@ cv2.namedWindow('Camera Feed', cv2.WINDOW_NORMAL)
 
 REAL_AREA = 20 # will be like square cm or smth
 
-def outlineRed(frame):
-    # return frame
-    frame = cv2.GaussianBlur(frame, (175, 175), cv2.BORDER_DEFAULT)
-    frame = cv2.GaussianBlur(frame, (175, 175), cv2.BORDER_DEFAULT)
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    # make this a little looser red bound
-    lower_red = np.array([0, 120, 120])
-    upper_red = np.array([5, 255, 255])
-    mask = cv2.inRange(hsv, lower_red, upper_red)
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    min_contour_area = 100
-    filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+def outlineRect(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    # dialations
+    kernel = np.ones((7, 7), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations=1)
+    
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    for contour in filtered_contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        biggest_box = [0, 0, 0, 0]
-        if w > 400 and h > 400:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            if (w * h > biggest_box[2] * biggest_box[3]):
-                biggest_box = [x, y, w, h]
-    return frame
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 100]
+
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        mask = np.zeros_like(edges)
+        cv2.drawContours(mask, [largest_contour], -1, (255), thickness=cv2.FILLED)
+
+        result_frame = cv2.bitwise_and(frame, frame, mask=mask)
+
+        return result_frame
+
+    return edges
 
 
 while True:
@@ -42,7 +44,7 @@ while True:
         print("Error: Could not read frame.")
         break
 
-    frame = outlineRed(frame)
+    frame = outlineRect(frame)
     cv2.imshow('Altered', frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
