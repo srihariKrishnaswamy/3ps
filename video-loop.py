@@ -15,11 +15,13 @@ if not capture.isOpened():
 cv2.namedWindow('Camera Feed', cv2.WINDOW_NORMAL)
 
 def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, real_height):
-    x, y, w, h = cv2.boundingRect(cnt)
+    x, y, w, h = cv2.boundingRect(cnt) # assign coords of bounding rectangle
     apparent_width = w
     apparent_height = h
-    average_apparent_size = (apparent_width + apparent_height) / 2.0
-    distance = (((real_width + real_height) / 2) * image_size) / (average_apparent_size * focal_length) # make this take width and height into account (this is really sketch as is)
+    # distance formula
+    average_apparent_size = (apparent_width + apparent_height) / 2.0 
+    distance = (real_width * image_size) / (2 * average_apparent_size * focal_length)
+
     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
     distance_text = f"Distance: {distance:.2f} cm"
     cv2.putText(frame, distance_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -28,19 +30,24 @@ def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, rea
 
 def outlineRect(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (15, 15), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    # dialations
+    blurred = cv2.GaussianBlur(gray, (15, 15), 0) # blurs image for less detailed images
+    edges = cv2.Canny(blurred, 50, 150) # canny is edge dection algorithm 
+
+    # dialations (makes edges darker and easier to see. doesn't really affect calculations)
     kernel = np.ones((15, 15), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=1)
+
+    # shapes between edges
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000]
     # aspect_ratio_threshold = 1.0 # looking at square contours - NEED TO FIGURE OUT HOW TO SEGMENT OUT THE NON-RECTANGULAR ONES
     # contours = [cnt for cnt in contours if aspect_ratio_threshold > (cv2.boundingRect(cnt)[2] / cv2.boundingRect(cnt)[3]) > 1 / aspect_ratio_threshold]
-    if contours:
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000] # only look for contours greater than 1000 sq pixels
+    if contours: # if there are contours, find the largest contour
         largest_contour = max(contours, key=cv2.contourArea)
-        mask = np.zeros_like(edges)
+
+        mask = np.zeros_like(edges) # black out everything else except edges
         cv2.drawContours(mask, [largest_contour], -1, (255), thickness=cv2.FILLED)
+
         result_frame = cv2.bitwise_and(frame, frame, mask=mask)
         cnt_area = cv2.contourArea(largest_contour)
         result_frame = get_distance_from_camera_rectangular(result_frame, largest_contour, frame_width, object_real_width, object_real_height)
