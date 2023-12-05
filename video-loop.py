@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import time
 
-focal_length = .50 # my mac has a 50mm focal length
+focal_length = 5 # my mac has a 50mm focal length
 capture = cv2.VideoCapture(0)
 frame_height, frame_width = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
 object_real_width = 10 #cm
@@ -18,7 +18,6 @@ def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, rea
     x, y, w, h = cv2.boundingRect(cnt) # assign coords of bounding rectangle
     apparent_width = w
     apparent_height = h
-
     # distance formula
     average_apparent_size = (apparent_width + apparent_height) / 2.0 
     distance = (real_width * image_size) / (2 * average_apparent_size * focal_length)
@@ -40,6 +39,8 @@ def outlineRect(frame):
 
     # shapes between edges
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # aspect_ratio_threshold = 1.0 # looking at square contours - NEED TO FIGURE OUT HOW TO SEGMENT OUT THE NON-RECTANGULAR ONES
+    # contours = [cnt for cnt in contours if aspect_ratio_threshold > (cv2.boundingRect(cnt)[2] / cv2.boundingRect(cnt)[3]) > 1 / aspect_ratio_threshold]
     contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000] # only look for contours greater than 1000 sq pixels
     if contours: # if there are contours, find the largest contour
         largest_contour = max(contours, key=cv2.contourArea)
