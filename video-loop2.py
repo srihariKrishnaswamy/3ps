@@ -105,14 +105,10 @@ def outlineRect(frame):
     edges = cv2.dilate(edges, kernel, iterations=1)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000]
-
     for cnt in contours:
-        # Process each contour here. For example:
         x, y, w, h = cv2.boundingRect(cnt)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        # If you want to calculate and display the distance for each contour, you can call the distance function here.
-        # frame = get_distance_from_camera_rectangular(frame, cnt, frame_width, object_real_width, object_real_height)
-
+        frame = get_distance_from_camera_rectangular(frame, cnt, frame_width, object_real_width, object_real_height)
     return frame
 
 while True:
