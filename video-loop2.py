@@ -60,18 +60,29 @@ def get_distance_from_camera_hough(frame, cnt):
             cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
     return frame
 
-def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, real_height):
-    x, y, w, h = cv2.boundingRect(cnt)
-    apparent_width = w
-    apparent_height = h
-    average_apparent_size = (apparent_width + apparent_height) / 2.0
-    distance = (((real_width + real_height) / 2) * image_size) / (average_apparent_size * focal_length) # make this take width and height into account (this is really sketch as is)
-    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    distance_text = f"Distance: {distance:.2f} cm"
-    cv2.putText(frame, distance_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    print(distance_text)
-    return frame
+# def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, real_height):
+#     x, y, w, h = cv2.boundingRect(cnt)
+#     apparent_width = w
+#     apparent_height = h
+#     average_apparent_size = (apparent_width + apparent_height) / 2.0
+#     distance = (((real_width + real_height) / 2) * image_size) / (average_apparent_size * focal_length) # make this take width and height into account (this is really sketch as is)
+#     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+#     distance_text = f"Distance: {distance:.2f} cm"
+#     cv2.putText(frame, distance_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+#     print(distance_text)
+#     return frame
 
+def get_area_from_camera_rectangular(frame, cnt, image_size, real_width, real_height):
+    x, y, w, h = cv2.boundingRect(cnt)
+    area = w * h
+    # apparent_width = w
+    # apparent_height = h
+    # average_apparent_size = (apparent_width + apparent_height) / 2.0
+    # distance = (((real_width + real_height) / 2) * image_size) / (average_apparent_size * focal_length) # make this take width and height into account (this is really sketch as is)
+    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    area_text = f"Area: {area:.2f}"
+    cv2.putText(frame, area_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return frame
 
 # def outlineRect(frame):
 #     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -108,8 +119,10 @@ def outlineRect(frame):
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        frame = get_distance_from_camera_rectangular(frame, cnt, frame_width, object_real_width, object_real_height)
+        frame = get_area_from_camera_rectangular(frame, cnt, frame_width, object_real_width, object_real_height)
     return frame
+
+
 
 while True:
     is_successful, frame = capture.read()
