@@ -14,102 +14,97 @@ if not capture.isOpened():
 
 cv2.namedWindow('Camera Feed', cv2.WINDOW_NORMAL)
 
-
-
 def outlineHough(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (15, 15), 0)
-    edges = cv2.Canny(blurred, 50, 150)
+    blurred = cv2.GaussianBlur(gray, (9, 9), 0)
+    edges = cv2.Canny(blurred, 50, 200)
     # dialations
-    kernel = np.ones((15, 15), np.uint8)
+    kernel = np.ones((5, 5), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=1)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000]
-    if contours:
-        cnt = max(contours, key=cv2.contourArea)
-        frame = get_distance_from_camera_hough(frame, cnt)
-    return frame
+    res = get_distance_from_camera_hough(edges, frame)
+    return res
 
-def get_distance_from_camera_edge(frame, cnt, image_size, real_width, real_height):
-    x, y, w, h = cv2.boundingRect(cnt)
-    cnt_area = cv2.contourArea(cnt)
-    distance = (((real_width + real_height) / 2) * image_size) / (cnt_area * focal_length) # make this take width and height into account (this is really sketch as is)
-    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    distance_text = f"Distance: {distance:.2f} cm"
-    cv2.putText(frame, distance_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    print(distance_text)
-    return frame
+def get_distance_from_camera_hough(edges, og): # AFTER TESTING: I like probabalistic better so that's what's in there
+    height, width, channels = og.shape
+    print(height, width)
+    blank_frame = np.zeros((height, width, 1), dtype=np.uint8)
 
-def get_distance_from_camera_hough(frame, cnt):
-    mask = np.zeros_like(frame)
-    cv2.drawContours(mask, [cnt], -1, (255), thickness=cv2.FILLED)
-    gray_mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray_mask, 50, 150)
-    lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=100)
-    if lines is not None:
-        for line in lines:
-            rho, theta = line[0]
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a * rho
-            y0 = b * rho
-            x1 = int(x0 + 1000 * (-b))
-            y1 = int(y0 + 1000 * (a))
-            x2 = int(x0 - 1000 * (-b))
-            y2 = int(y0 - 1000 * (a))
-            cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-    return frame
+    linesP = cv2.HoughLinesP(edges, 1, np.pi / 180, 50, None, 50, 10)
+    if linesP is not None:
+        for i in range(len(linesP)):
+            l = linesP[i][0]
+            cv2.line(blank_frame, (l[0], l[1]), (l[2], l[3]), 255, 3, cv2.LINE_AA)
+        contours, _ = cv2.findContours(blank_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        max_area = 0
+        max_area_contour = None
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            # get average color of countour and instead of getting max area, if it's red in the og frame then take that as the countour we want
+            if area > max_area:
+                max_area = area
+                max_area_contour = contour
+            # avg_color = get_avg_color(contour, og, blank_frame) # this takes a lota tuning, wanna replace the top if block with this
+            # if satisfies_threshold(avg_color) and area > max_area:
+            #     max_area = area
+            #     max_area_contour = contour
+        if max_area_contour is not None:
+            blank_frame = np.zeros((height, width, 1), dtype=np.uint8)
+            cv2.drawContours(blank_frame, [max_area_contour], -1, (255, 255, 0), thickness=2)
+            kernel = np.ones((9, 9), np.uint8)
+            dilated = cv2.dilate(blank_frame, kernel, iterations=1)
+            dilated, corners = get_corners(dilated)
+            print(max_area, corners)
+            return dilated
+            # now get the houghlines on this and get pitch roll and yaw & then x y & z distance
+    return blank_frame
+    # tmrw: get the edges that make up the largest contour and do the bottom calculation: 
+    # distance procedure: we know it's a square so we gotta get all the angles and edge distances for the 'square' in the frame
+    # and since its a square we can use these angle and edge distances to get its orientation difference from the camera
+    # and then factoring in this orientation difference we can get x y & z distance
 
-def get_distance_from_camera_rectangular(frame, cnt, image_size, real_width, real_height):
-    x, y, w, h = cv2.boundingRect(cnt)
-    apparent_width = w
-    apparent_height = h
-    average_apparent_size = (apparent_width + apparent_height) / 2.0
-    distance = (((real_width + real_height) / 2) * image_size) / (average_apparent_size * focal_length) # make this take width and height into account (this is really sketch as is)
-    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    distance_text = f"Distance: {distance:.2f} cm"
-    cv2.putText(frame, distance_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    print(distance_text)
-    return frame
+def get_avg_color(contour, frame, bw):
+    mask = np.zeros_like(bw, dtype=np.uint8)
+    cv2.drawContours(mask, [contour], -1, (255), thickness=cv2.FILLED)
+    pixels_inside_contour = cv2.bitwise_and(frame, frame, mask=mask)
+    average_color = np.mean(pixels_inside_contour, axis=(0, 1))  
+    print("average_color " + str(average_color))
+    return average_color
 
+def satisfies_threshold(color):
+    low = (0, 0, 50)
+    high = (20, 20, 255)
+    for i in range(len(color)):
+        if color[i] < low[i] or color[i] > high[i]: return False
+    return True
 
-def outlineRect(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    # dialations
-    kernel = np.ones((15, 15), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 1000]
-    # aspect_ratio_threshold = 1.0 # looking at square contours - NEED TO FIGURE OUT HOW TO SEGMENT OUT THE NON-RECTANGULAR ONES
-    # contours = [cnt for cnt in contours if aspect_ratio_threshold > (cv2.boundingRect(cnt)[2] / cv2.boundingRect(cnt)[3]) > 1 / aspect_ratio_threshold]
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        mask = np.zeros_like(edges)
-        cv2.drawContours(mask, [largest_contour], -1, (255), thickness=cv2.FILLED)
-        result_frame = cv2.bitwise_and(frame, frame, mask=mask)
-        result_frame = get_distance_from_camera_edge(result_frame, largest_contour, frame_width, object_real_width, object_real_height)
-
-        # result_frame = get_distance_from_camera_rectangular(result_frame, largest_contour, frame_width, object_real_width, object_real_height)
-        # print("CONTOUR AREA: " + str(cnt_area))
-        return result_frame
-    return edges
+def get_corners(edges_frame):
+    contours, _ = cv2.findContours(edges_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    edges_frame = cv2.cvtColor(edges_frame, cv2.COLOR_GRAY2BGR)
+    four_sided_contour = None
+    four_corners = None
+    vertices = 4
+    for contour in contours:
+        epsilon = 0.02 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        if len(approx) == vertices:
+            four_sided_contour = approx
+            break
+    if four_sided_contour is not None:
+        # print("got a 4 sided")
+        four_corners = four_sided_contour.reshape(-1, 2)
+        for x, y in four_corners:
+            cv2.circle(edges_frame, (x, y), 10, (0, 0, 255), -1) 
+    return edges_frame, four_corners
 
 while True:
     is_successful, frame = capture.read()
-
     if not is_successful:
         print("Error: Could not read frame.")
         break
-
     frame = outlineHough(frame)
     cv2.imshow('Altered', frame)
-
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
     time.sleep(0.1)
-
 capture.release()
 cv2.destroyAllWindows()
