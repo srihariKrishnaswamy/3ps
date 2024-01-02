@@ -10,7 +10,7 @@ cy = 5.70956578e+02
 dist = [-1.38149680e-01, 3.57171479e+00 , 1.19686067e-02 , -6.03857380e-02 , -1.40045591e+01]
 
 focal_length_mm = 50 # my mac has a 50mm focal length
-side_length = 12
+side_length = .12
 capture = cv2.VideoCapture(0)
 frame_height, frame_width = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
 object_real_width = 10 #cm
@@ -114,6 +114,7 @@ def get_pry(frame, corners, focal_length_mm=focal_length_mm, fx=fx, fy=fy, cx=cx
         image_coordinates.reshape(-1, 1, 2),
         K, np.zeros(4)
     )
+    print("undist: ", undistorted_image_coordinates)
     _, rotation_vector, translation_vector = cv2.solvePnP(
         object_points, undistorted_image_coordinates, K, np.zeros(4)
     )
@@ -125,22 +126,8 @@ def get_pry(frame, corners, focal_length_mm=focal_length_mm, fx=fx, fy=fy, cx=cx
     print("Roll:", roll)
     print("Yaw:", yaw)
     #### GETTING CENTER OF SQUARE #####
-    center_x, center_y = undistorted_image_coordinates[0].astype(int).ravel()
-    cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
-    print("Center x:", center_x)
-    print("Center y:", center_y)
+    frame = draw_axes(frame, corners)
     return frame, pitch, roll, yaw
-    # rotation_matrix = np.eye(3) # camera does not rotate 
-    # translation_vector = np.array([0, 0, 0]) # taking the camera as origins
-    # image_coordinates = np.array(corners, dtype=np.float32)
-    # undistorted_image_coordinates = cv2.undistortPoints(image_coordinates.reshape(-1, 1, 2), np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]), np.array(dist))
-    # # print(undistorted_image_coordinates.shape)
-    # print('ROT')
-    # object_points = np.hstack((undistorted_image_coordinates, np.zeros((4, 1, 2))))  # Assuming the square is in the XY plane
-    # # object_points = object_points.reshape(-1, 1, 3)
-    # # world_coordinates = cv2.transform(object_points, np.hstack((rotation_matrix, translation_vector.reshape(-1, 1)))) # here if we need it?
-    # rotation_matrix, translation_vector, _, _, _, _, _ = cv2.decomposeProjectionMatrix(np.hstack((rotation_matrix, translation_vector.reshape(-1, 1))))  # Calculate pitch, roll, and yaw
-    # return res
 
 
 def rotation_matrix_to_euler_angles(rotation_matrix): # bruh no clue what's going on here
@@ -155,6 +142,22 @@ def rotation_matrix_to_euler_angles(rotation_matrix): # bruh no clue what's goin
         y = np.arctan2(-rotation_matrix[2, 0], sy)
         z = 0
     return np.array([x, y, z])
+
+def draw_axes(frame, corners):
+    print("CORNERS: ", corners)
+    x1, y1 = corners[0]
+    x2, y2 = corners[1]
+    x3, y3 = corners[3]
+    x4, y4 = corners[2]
+    m1 = (y4 - y1) / (x4 - x1)
+    b1 = y1 - (m1 * x1)
+    m2 = (y3 - y2) / (x3 - x2)
+    b2 = y2 - (m2 * x2)
+    center_x = int((b2 - b1) / (m1 - m2))
+    center_y = int(m1 * center_x + b1)
+    cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
+    print("CENTER: ", (center_x, center_y))
+    return frame
 
 while True:
     is_successful, frame = capture.read()
