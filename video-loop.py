@@ -2,7 +2,15 @@ import cv2
 import numpy as np
 import time
 
-focal_length = 5 # my mac has a 50mm focal length
+# INTRINSIC CAMERA PARAMS (OBTAIN VIA RUNNING CAMERA CALIBRATION)
+fx = 2.44171380e+03
+fy = 2.39069151e+03
+cx = 6.30504437e+02
+cy = 5.70956578e+02
+dist = [-1.38149680e-01, 3.57171479e+00 , 1.19686067e-02 , -6.03857380e-02 , -1.40045591e+01]
+
+focal_length_mm = 50 # my mac has a 50mm focal length
+side_length = 12
 capture = cv2.VideoCapture(0)
 frame_height, frame_width = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
 object_real_width = 10 #cm
@@ -26,7 +34,6 @@ def outlineHough(frame):
 
 def get_distance_from_camera_hough(edges, og): # AFTER TESTING: I like probabalistic better so that's what's in there
     height, width, channels = og.shape
-    print(height, width)
     blank_frame = np.zeros((height, width, 1), dtype=np.uint8)
 
     linesP = cv2.HoughLinesP(edges, 1, np.pi / 180, 50, None, 50, 10)
@@ -53,14 +60,12 @@ def get_distance_from_camera_hough(edges, og): # AFTER TESTING: I like probabali
             kernel = np.ones((9, 9), np.uint8)
             dilated = cv2.dilate(blank_frame, kernel, iterations=1)
             dilated, corners = get_corners(dilated)
-            print(max_area, corners)
+            if corners is not None: 
+                print(max_area, corners)
+                dilated, pitch, roll, yaw = get_pry(dilated, corners)
             return dilated
             # now get the houghlines on this and get pitch roll and yaw & then x y & z distance
     return blank_frame
-    # tmrw: get the edges that make up the largest contour and do the bottom calculation: 
-    # distance procedure: we know it's a square so we gotta get all the angles and edge distances for the 'square' in the frame
-    # and since its a square we can use these angle and edge distances to get its orientation difference from the camera
-    # and then factoring in this orientation difference we can get x y & z distance
 
 def get_avg_color(contour, frame, bw):
     mask = np.zeros_like(bw, dtype=np.uint8)
@@ -95,6 +100,61 @@ def get_corners(edges_frame):
         for x, y in four_corners:
             cv2.circle(edges_frame, (x, y), 10, (0, 0, 255), -1) 
     return edges_frame, four_corners
+
+def get_pry(frame, corners, focal_length_mm=focal_length_mm, fx=fx, fy=fy, cx=cx, cy=cy, square_side_length=side_length):
+    object_points = np.array([
+        [-square_side_length / 2, -square_side_length / 2, 0],
+        [square_side_length / 2, -square_side_length / 2, 0],
+        [square_side_length / 2, square_side_length / 2, 0],
+        [-square_side_length / 2, square_side_length / 2, 0]
+    ], dtype=np.float32)
+    K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+    image_coordinates = np.array(corners, dtype=np.float32)
+    undistorted_image_coordinates = cv2.undistortPoints(
+        image_coordinates.reshape(-1, 1, 2),
+        K, np.zeros(4)
+    )
+    _, rotation_vector, translation_vector = cv2.solvePnP(
+        object_points, undistorted_image_coordinates, K, np.zeros(4)
+    )
+    print("translation mat: ", translation_vector)
+    rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
+    euler_angles = rotation_matrix_to_euler_angles(rotation_matrix)
+    pitch, roll, yaw = np.degrees(euler_angles)
+    print("Pitch:", pitch)
+    print("Roll:", roll)
+    print("Yaw:", yaw)
+    #### GETTING CENTER OF SQUARE #####
+    center_x, center_y = undistorted_image_coordinates[0].astype(int).ravel()
+    cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
+    print("Center x:", center_x)
+    print("Center y:", center_y)
+    return frame, pitch, roll, yaw
+    # rotation_matrix = np.eye(3) # camera does not rotate 
+    # translation_vector = np.array([0, 0, 0]) # taking the camera as origins
+    # image_coordinates = np.array(corners, dtype=np.float32)
+    # undistorted_image_coordinates = cv2.undistortPoints(image_coordinates.reshape(-1, 1, 2), np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]), np.array(dist))
+    # # print(undistorted_image_coordinates.shape)
+    # print('ROT')
+    # object_points = np.hstack((undistorted_image_coordinates, np.zeros((4, 1, 2))))  # Assuming the square is in the XY plane
+    # # object_points = object_points.reshape(-1, 1, 3)
+    # # world_coordinates = cv2.transform(object_points, np.hstack((rotation_matrix, translation_vector.reshape(-1, 1)))) # here if we need it?
+    # rotation_matrix, translation_vector, _, _, _, _, _ = cv2.decomposeProjectionMatrix(np.hstack((rotation_matrix, translation_vector.reshape(-1, 1))))  # Calculate pitch, roll, and yaw
+    # return res
+
+
+def rotation_matrix_to_euler_angles(rotation_matrix): # bruh no clue what's going on here
+    sy = np.sqrt(rotation_matrix[0, 0] ** 2 + rotation_matrix[1, 0] ** 2)
+    singular = sy < 1e-6
+    if not singular:
+        x = np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2])
+        y = np.arctan2(-rotation_matrix[2, 0], sy)
+        z = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+    else:
+        x = np.arctan2(-rotation_matrix[1, 2], rotation_matrix[1, 1])
+        y = np.arctan2(-rotation_matrix[2, 0], sy)
+        z = 0
+    return np.array([x, y, z])
 
 while True:
     is_successful, frame = capture.read()
