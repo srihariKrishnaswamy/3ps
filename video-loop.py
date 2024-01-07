@@ -8,13 +8,14 @@ fy = 2.39069151e+03
 cx = 6.30504437e+02
 cy = 5.70956578e+02
 dist = [-1.38149680e-01, 3.57171479e+00 , 1.19686067e-02 , -6.03857380e-02 , -1.40045591e+01]
+camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
 focal_length_mm = 50 # my mac has a 50mm focal length
 side_length = .12
 capture = cv2.VideoCapture(0)
 frame_height, frame_width = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-object_real_width = 10 #cm
-object_real_height = 10 #cm
+object_real_width = .10 #10 cm
+object_real_height = .10 #10 cm
 
 if not capture.isOpened():
     print("Error: Could not open camera.")
@@ -61,8 +62,9 @@ def get_distance_from_camera_hough(edges, og): # AFTER TESTING: I like probabali
             dilated = cv2.dilate(blank_frame, kernel, iterations=1)
             dilated, corners = get_corners(dilated)
             if corners is not None: 
-                print(max_area, corners)
+                # print(max_area, corners)
                 dilated, pitch, roll, yaw = get_pry(dilated, corners)
+                x, y, z = get_xyz_disp(pitch, roll, yaw, corners, camera_matrix, dist)
             return dilated
             # now get the houghlines on this and get pitch roll and yaw & then x y & z distance
     return blank_frame
@@ -126,9 +128,22 @@ def get_pry(frame, corners, focal_length_mm=focal_length_mm, fx=fx, fy=fy, cx=cx
     print("Roll:", roll)
     print("Yaw:", yaw)
     #### GETTING CENTER OF SQUARE #####
-    frame = draw_axes(frame, corners)
+    frame = draw_axes(frame, corners, pitch, roll, yaw)
     return frame, pitch, roll, yaw
 
+def get_xyz_disp(pitch, roll, yaw, corners, mtx, dist, real_world_side_length=object_real_width):
+    corners_array = np.array(corners, dtype=np.float32)
+    corners_array = corners_array.reshape(-1, 1, 2)
+    undistorted_corners = cv2.undistortPoints(corners_array, mtx, np.array(dist))
+    undistorted_corners = undistorted_corners.reshape((4, 2))
+    square_corners_3d = np.hstack((undistorted_corners, np.zeros((4, 1))))
+    square_corners_3d *= real_world_side_length
+    rotation_matrix = cv2.Rodrigues(np.array([pitch, roll, yaw]))[0]
+    # Apply the rotation matrix to the 3D coordinates
+    rotated_square_corners_3d = np.dot(rotation_matrix, square_corners_3d.T).T
+    x_displacement, y_displacement, z_displacement = np.mean(rotated_square_corners_3d, axis=0)
+    print(x_displacement, y_displacement, z_displacement)
+    return x_displacement, y_displacement, z_displacement
 
 def rotation_matrix_to_euler_angles(rotation_matrix): # bruh no clue what's going on here
     sy = np.sqrt(rotation_matrix[0, 0] ** 2 + rotation_matrix[1, 0] ** 2)
@@ -143,8 +158,8 @@ def rotation_matrix_to_euler_angles(rotation_matrix): # bruh no clue what's goin
         z = 0
     return np.array([x, y, z])
 
-def draw_axes(frame, corners):
-    print("CORNERS: ", corners)
+def draw_axes(frame, corners, pitch, roll, yaw, scale=100):
+    # DRAWING CENTER POINT
     x1, y1 = corners[0]
     x2, y2 = corners[1]
     x3, y3 = corners[3]
@@ -155,8 +170,27 @@ def draw_axes(frame, corners):
     b2 = y2 - (m2 * x2)
     center_x = int((b2 - b1) / (m1 - m2))
     center_y = int(m1 * center_x + b1)
-    cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
-    print("CENTER: ", (center_x, center_y))
+    center = (center_x, center_y)
+    cv2.circle(frame, center, 5, (0, 255, 0), -1)
+    print("CENTER: ", center)
+    # PRY stuff for axes
+    axis_length = scale
+
+    # Calculate the 2D coordinates of the X, Y, and Z axes based on angles
+    x_axis_end = (center[0] + axis_length * np.cos(yaw), center[1] + axis_length * np.sin(yaw))
+    y_axis_end = (center[0] - axis_length * np.sin(yaw), center[1] + axis_length * 10 * np.cos(yaw))
+    z_axis_end = (center[0] + axis_length * np.cos(yaw + np.pi/2), center[1] + axis_length * np.sin(yaw + np.pi/2))
+
+    # Convert the coordinates to integers
+    x_axis_end = tuple(np.int32(x_axis_end))
+    y_axis_end = tuple(np.int32(y_axis_end))
+    z_axis_end = tuple(np.int32(z_axis_end))
+    print("AXES ENDS: ", x_axis_end, y_axis_end, z_axis_end)
+
+    # Draw the axes on the image
+    cv2.line(frame, center, x_axis_end, (0, 0, 255), 2)  # X-axis (red)
+    cv2.line(frame, center, y_axis_end, (0, 255, 0), 2)  # Y-axis (green)
+    cv2.line(frame, center, z_axis_end, (255, 0, 0), 2)  # Z-axis (blue)
     return frame
 
 while True:
