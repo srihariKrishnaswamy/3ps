@@ -139,7 +139,6 @@ def get_xyz_disp(pitch, roll, yaw, corners, mtx, dist, real_world_side_length=ob
     square_corners_3d = np.hstack((undistorted_corners, np.zeros((4, 1))))
     square_corners_3d *= real_world_side_length
     rotation_matrix = cv2.Rodrigues(np.array([pitch, roll, yaw]))[0]
-    # Apply the rotation matrix to the 3D coordinates
     rotated_square_corners_3d = np.dot(rotation_matrix, square_corners_3d.T).T
     x_displacement, y_displacement, z_displacement = np.mean(rotated_square_corners_3d, axis=0)
     print(x_displacement, y_displacement, z_displacement)
@@ -175,19 +174,16 @@ def draw_axes(frame, corners, pitch, roll, yaw, scale=100):
     print("CENTER: ", center)
     # PRY stuff for axes
     axis_length = scale
-
-    # Calculate the 2D coordinates of the X, Y, and Z axes based on angles
+    
     x_axis_end = (center[0] + axis_length * np.cos(yaw), center[1] + axis_length * np.sin(yaw))
     y_axis_end = (center[0] - axis_length * np.sin(yaw), center[1] + axis_length * 10 * np.cos(yaw))
     z_axis_end = (center[0] + axis_length * np.cos(yaw + np.pi/2), center[1] + axis_length * np.sin(yaw + np.pi/2))
 
-    # Convert the coordinates to integers
     x_axis_end = tuple(np.int32(x_axis_end))
     y_axis_end = tuple(np.int32(y_axis_end))
     z_axis_end = tuple(np.int32(z_axis_end))
     print("AXES ENDS: ", x_axis_end, y_axis_end, z_axis_end)
 
-    # Draw the axes on the image
     cv2.line(frame, center, x_axis_end, (0, 0, 255), 2)  # X-axis (red)
     cv2.line(frame, center, y_axis_end, (0, 255, 0), 2)  # Y-axis (green)
     cv2.line(frame, center, z_axis_end, (255, 0, 0), 2)  # Z-axis (blue)
